@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Artistic Weather Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            transition: background-color 2s ease;
+        }
+
+        #weather-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            z-index: 2;
+            width: 80%;
+            max-width: 600px;
+            padding: 2rem;
+            background: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        #search-box {
+            width: 100%;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            border: none;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            font-size: 1.2rem;
+            text-align: center;
+        }
+
+        #weather-info {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .weather-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 1rem;
+            border-radius: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .weather-icon {
+            font-size: 2rem;
+        }
+
+        #error-message {
+            color: #ff4444;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        #loading {
+            display: none;
+            margin: 1rem 0;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="weather-container">
+        <input type="text" id="search-box" placeholder="Enter city name...">
+        <div id="loading">
+            <div class="spinner"></div>
+        </div>
+        <div id="error-message"></div>
+        <div id="weather-info"></div>
+    </div>
+
+    <script>
+        let particles = [];
+        let weatherType = 'pleasant';
+        const API_KEY = '45c7588ab46fbfad9023539b10570081';
+        let weatherSound;
+
+        // Sound effects setup
+        const sounds = {
+            cold: new Howl({
+                src: ['https://cdnjs.cloudflare.com/sounds/wind.mp3'],
+                loop: true,
+                volume: 0.5
+            }),
+            pleasant: new Howl({
+                src: ['https://cdnjs.cloudflare.com/sounds/birds.mp3'],
+                loop: true,
+                volume: 0.3
+            }),
+            hot: new Howl({
+                src: ['https://cdnjs.cloudflare.com/sounds/fire.mp3'],
+                loop: true,
+                volume: 0.4
+            })
+        };
+
+        class Particle {
+            constructor() {
+                this.reset();
+                this.y = random(-50, 0);
+                this.angle = random(TWO_PI);
+            }
+
+            reset() {
+                this.x = random(width);
+                this.y = -20;
+                this.speed = random(2, 5);
+                this.size = random(5, 15);
+                this.opacity = 255;
+            }
+
+            update() {
+                this.y += this.speed;
+                
+                if (weatherType === 'pleasant') {
+                    this.x += sin(frameCount * 0.05) * 0.5;
+                    this.angle += 0.02;
+                } else if (weatherType === 'cold') {
+                    this.x += sin(frameCount * 0.02) * 1;
+                } else {
+                    this.x += random(-1, 1);
+                    this.opacity = random(200, 255);
+                }
+
+                if (this.y > height + 20) {
+                    this.reset();
+                }
+            }
+
+            draw() {
+                push();
+                noStroke();
+                
+                if (weatherType === 'cold') {
+                    // Snowflake
+                    fill(255, this.opacity);
+                    translate(this.x, this.y);
+                    for (let i = 0; i < 6; i++) {
+                        rotate(PI / 3);
+                        line(0, 0, this.size, 0);
+                        ellipse(this.size * 0.5, 0, 2, 2);
+                    }
+                } else if (weatherType === 'pleasant') {
+                    // Cherry blossom petal
+                    fill(255, 182, 193, this.opacity);
+                    translate(this.x, this.y);
+                    rotate(this.angle);
+                    ellipse(0, 0, this.size, this.size * 0.5);
+                } else {
+                    // Fire particle
+                    let glowIntensity = sin(frameCount * 0.1) * 50 + 200;
+                    fill(255, random(100, 200), 0, glowIntensity);
+                    ellipse(this.x, this.y, this.size * 0.8);
+                    fill(255, 255, 0, glowIntensity * 0.7);
+                    ellipse(this.x, this.y, this.size * 0.4);
+                }
+                pop();
+            }
+        }
+
+        function setup() {
+            createCanvas(windowWidth, windowHeight);
+            for (let i = 0; i < 100; i++) {
+                particles.push(new Particle());
+            }
+
+            const searchBox = document.getElementById('search-box');
+            searchBox.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    getWeatherData(searchBox.value);
+                }
+            });
+        }
+
+        function draw() {
+            clear();
+            particles.forEach(particle => {
+                particle.update();
+                particle.draw();
+            });
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight);
+        }
+
+        async function getWeatherData(city) {
+            const loading = document.getElementById('loading');
+            const errorMsg = document.getElementById('error-message');
+            loading.style.display = 'block';
+            errorMsg.style.display = 'none';
+
+            try {
+                // Get coordinates
+                const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${API_KEY}`;
+                const geoResponse = await fetch(geoUrl);
+                const geoData = await geoResponse.json();
+
+                if (!geoData.length) {
+                    throw new Error("City not found");
+                }
+
+                const { lat, lon } = geoData[0];
+
+                // Get weather data
+                const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`;
+                const weatherResponse = await fetch(weatherUrl);
+                const weatherData = await weatherResponse.json();
+
+                // Get air pollution data
+                const pollutionUrl = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${API_KEY}`;
+                const pollutionResponse = await fetch(pollutionUrl);
+                const pollutionData = await pollutionResponse.json();
+
+                updateWeatherDisplay(weatherData, pollutionData);
+            } catch (error) {
+                errorMsg.textContent = error.message === "City not found" ? 
+                    "We couldn't find your city" : 
+                    "An error occurred while fetching weather data";
+                errorMsg.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function updateWeatherDisplay(weather, pollution) {
+            const temp = weather.main.temp;
+            const humidity = weather.main.humidity;
+            const wind = weather.wind.speed;
+            const aqi = pollution.list[0].main.aqi;
+
+            // Stop all sounds
+            Object.values(sounds).forEach(sound => sound.stop());
+
+            // Update weather type and background
+            if (temp < 10) {
+                weatherType = 'cold';
+                document.body.style.backgroundColor = '#2c3e50';
+                sounds.cold.play();
+            } else if (temp >= 28) {
+                weatherType = 'hot';
+                document.body.style.backgroundColor = '#c0392b';
+                sounds.hot.play();
+            } else {
+                weatherType = 'pleasant';
+                document.body.style.backgroundColor = '#27ae60';
+                sounds.pleasant.play();
+            }
+
+            // Update display
+            const weatherInfo = document.getElementById('weather-info');
+            weatherInfo.innerHTML = `
+                <div class="weather-card">
+                    <span class="weather-icon">🌡️</span>
+                    <h3>Temperature</h3>
+                    <p>${temp.toFixed(1)}°C</p>
+                </div>
+                <div class="weather-card">
+                    <span class="weather-icon">💧</span>
+                    <h3>Humidity</h3>
+                    <p>${humidity}%</p>
+                </div>
+                <div class="weather-card">
+                    <span class="weather-icon">🌬️</span>
+                    <h3>Wind Speed</h3>
+                    <p>${wind.toFixed(1)} m/s</p>
+                </div>
+                <div class="weather-card">
+                    <span class="weather-icon">🌫️</span>
+                    <h3>Air Quality</h3>
+                    <p>Index: ${aqi}/5</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
