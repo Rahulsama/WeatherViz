@@ -19,6 +19,71 @@
             transition: background-color 2s ease;
         }
 
+        .title {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            top: 2rem;
+            z-index: 3;
+            font-size: 3rem;
+            font-weight: bold;
+            animation: wave 3s ease-in-out infinite;
+        }
+
+        .title span {
+            display: inline-block;
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            text-shadow: 2px 4px 8px rgba(0,0,0,0.3);
+            transition: background-image 2s ease;
+        }
+
+        @keyframes wave {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .decor {
+            position: fixed;
+            width: 150px;
+            height: 150px;
+            z-index: 1;
+            opacity: 0;
+            transition: opacity 1s ease;
+        }
+
+        .decor.top-left { top: 20px; left: 20px; }
+        .decor.top-right { top: 20px; right: 20px; }
+        .decor.bottom-left { bottom: 20px; left: 20px; }
+        .decor.bottom-right { bottom: 20px; right: 20px; }
+
+/*         #weather-container {
+            position: absolute;
+            top: 55%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            z-index: 2;
+            width: 80%;
+            max-width: 600px;
+            padding: 2rem;
+            background: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        } */
+
+        #description-box {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            font-size: 1.1rem;
+        }
+
+
         #weather-container {
             position: absolute;
             top: 50%;
@@ -102,6 +167,13 @@
     </style>
 </head>
 <body>
+    <h1 class="title"><span>mAwesome</span></h1>
+    
+    <!-- Decorative Elements -->
+    <div class="decor top-left"></div>
+    <div class="decor top-right"></div>
+    <div class="decor bottom-left"></div>
+    <div class="decor bottom-right"></div>
     <div id="weather-container">
         <input type="text" id="search-box" placeholder="Enter city name...">
         <div id="loading">
@@ -115,37 +187,71 @@
         let particles = [];
         let weatherType = 'pleasant';
         const API_KEY = '45c7588ab46fbfad9023539b10570081';
+        let sparklesEnabled = true;
         let weatherSound;
 
         // Sound effects setup
-        const sounds = {
+         const sounds = {
             cold: new Howl({
-                src: ['https://cdnjs.cloudflare.com/sounds/wind.mp3'],
+                src: ['winter-winds.mp3'],
                 loop: true,
                 volume: 0.5
             }),
             pleasant: new Howl({
-                src: ['https://cdnjs.cloudflare.com/sounds/birds.mp3'],
+                src: ['birdsong-spring.mp3'],
                 loop: true,
                 volume: 0.3
             }),
             hot: new Howl({
-                src: ['https://cdnjs.cloudflare.com/sounds/fire.mp3'],
+                src: ['hell-fire.mp3'],
+                loop: true,
+                volume: 0.4
+            }),
+            rain: new Howl({
+                src: ['rain-placeholder.mp3'], // Add your rain sound file
                 loop: true,
                 volume: 0.4
             })
         };
 
+         class Trail {
+            constructor(x, y, color, opacity) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.opacity = opacity;
+                this.sparkle = sparklesEnabled ? random(0, 1) > 0.8 : false;
+            }
+
+            draw() {
+                if (this.sparkle) {
+                    push();
+                    translate(this.x, this.y);
+                    rotate(frameCount * 0.1);
+                    stroke(255, this.opacity * 0.8);
+                    line(-3, 0, 3, 0);
+                    line(0, -3, 0, 3);
+                    pop();
+                }
+                noStroke();
+                fill(...this.color, this.opacity);
+                ellipse(this.x, this.y, 3, 3);
+                this.opacity -= 5;
+            }
+        }
+
         class Particle {
             constructor() {
                 this.reset();
                 this.y = random(-50, 0);
+                this.trails = [];
                 this.angle = random(TWO_PI);
             }
 
             reset() {
                 this.x = random(width);
                 this.y = -20;
+                this.trails = [];
                 this.speed = random(2, 5);
                 this.size = random(5, 15);
                 this.opacity = 255;
@@ -153,6 +259,21 @@
 
             update() {
                 this.y += this.speed;
+                
+                // Store previous position for trail
+                if (frameCount % 2 === 0) {
+                    this.trails.unshift(new Trail(
+                        this.x, 
+                        this.y, 
+                        weatherType === 'cold' ? [255, 255, 255] :
+                        weatherType === 'pleasant' ? [255, 182, 193] :
+                        weatherType === 'rain' ? [158, 197, 254] :
+                        [255, 150, 0],
+                        255
+                    ));
+                }
+                this.trails = this.trails.filter(trail => trail.opacity > 0);
+                if (this.trails.length > 10) this.trails.pop();
                 
                 if (weatherType === 'pleasant') {
                     this.x += sin(frameCount * 0.05) * 0.5;
@@ -172,6 +293,8 @@
             draw() {
                 push();
                 noStroke();
+                
+                this.trails.forEach(trail => trail.draw());
                 
                 if (weatherType === 'cold') {
                     // Snowflake
@@ -199,7 +322,79 @@
                 pop();
             }
         }
+ function updateWeatherDisplay(weather, pollution) {
+            const temp = weather.main.temp;
+            const humidity = weather.main.humidity;
+            const wind = weather.wind.speed;
+            const aqi = pollution.list[0].main.aqi;
+            const description = weather.weather[0].description;
+            const isRaining = weather.weather[0].main.toLowerCase().includes('rain');
 
+            // Update title gradient
+            const titleSpan = document.querySelector('.title span');
+            if (temp < 10) {
+                titleSpan.style.backgroundImage = 'linear-gradient(45deg, #a8e6ff, #4a90e2)';
+            } else if (temp >= 28) {
+                titleSpan.style.backgroundImage = 'linear-gradient(45deg, #ff8c00, #ff4500)';
+            } else {
+                titleSpan.style.backgroundImage = 'linear-gradient(45deg, #98fb98, #3cb371)';
+            }
+
+            // Update weather type and background
+            weatherType = isRaining ? 'rain' :
+                         temp < 10 ? 'cold' :
+                         temp >= 28 ? 'hot' : 'pleasant';
+
+            // Update decorative elements
+            updateDecor(weatherType);
+
+            // Update icons based on temperature
+            const tempIcon = temp < 10 ? '❄️' :
+                           temp >= 28 ? '🔥' : '🌡️';
+            
+            // Update weather info display with new icons
+            const weatherInfo = document.getElementById('weather-info');
+            weatherInfo.innerHTML = `
+                <div class="weather-card">
+                    <span class="weather-icon">${tempIcon}</span>
+                    <h3>Temperature</h3>
+                    <p>${temp.toFixed(1)}°C</p>
+                </div>
+                <!-- Similar updates for other cards -->
+            `;
+
+            // Update description
+            const descriptionBox = document.getElementById('description-box');
+            descriptionBox.textContent = `Current conditions: ${description}`;
+        }
+
+        function updateDecor(type) {
+            const decors = document.querySelectorAll('.decor');
+            decors.forEach(decor => {
+                switch(type) {
+                    case 'cold':
+                        decor.innerHTML = '⛄';
+                        break;
+                    case 'pleasant':
+                        decor.innerHTML = '🌸';
+                        break;
+                    case 'hot':
+                        decor.innerHTML = '🌵';
+                        break;
+                    case 'rain':
+                        decor.innerHTML = '☔';
+                        break;
+                }
+                decor.style.opacity = '1';
+            });
+        }
+
+        // Add toggle for sparkles
+        window.toggleSparkles = function() {
+            sparklesEnabled = !sparklesEnabled;
+        }
+
+        
         function setup() {
             createCanvas(windowWidth, windowHeight);
             for (let i = 0; i < 100; i++) {
